@@ -1,0 +1,107 @@
+{
+  "constant": {
+    "naive": {
+      "rmse": 0.030320256123605574,
+      "contour_energy": 69.65058471507604,
+      "static_brightness_ratio": 0.9267141972878842,
+      "seconds_per_frame": 0.5943148136138916
+    },
+    "center_depth": {
+      "rmse": 0.04656623099330339,
+      "contour_energy": 69.36735281742925,
+      "static_brightness_ratio": 0.9318744741892021,
+      "seconds_per_frame": 0.5247762203216553
+    },
+    "visibility": {
+      "rmse": 0.0024143602656012987,
+      "contour_energy": 71.32287241817914,
+      "static_brightness_ratio": 1.0000011701392935,
+      "seconds_per_frame": 0.6852936744689941
+    },
+    "time_split": {
+      "rmse": 0.0013204538805106256,
+      "contour_energy": 71.35966163227837,
+      "static_brightness_ratio": 1.00000112138349,
+      "seconds_per_frame": 2.019774913787842
+    },
+    "gaussian_baseline": {
+      "rmse": 0.13018415742601433,
+      "contour_energy": 31.853051011991475,
+      "static_brightness_ratio": 0.8995165566035128
+    },
+    "ground_truth": {
+      "contour_energy": 71.37044752757757
+    },
+    "pixels_with_multiple_segments": 108
+  },
+  "turning": {
+    "naive": {
+      "rmse": 0.013038377117882341,
+      "contour_energy": 67.69994232416893,
+      "static_brightness_ratio": 0.929243141431945,
+      "seconds_per_frame": 0.26633334159851074
+    },
+    "center_depth": {
+      "rmse": 0.04834766318784352,
+      "contour_energy": 69.551272061616,
+      "static_brightness_ratio": 0.929243141431945,
+      "seconds_per_frame": 0.25069665908813477
+    },
+    "visibility": {
+      "rmse": 0.0023106029732964,
+      "contour_energy": 68.73899181315389,
+      "static_brightness_ratio": 1.0,
+      "seconds_per_frame": 0.3238363265991211
+    },
+    "time_split": {
+      "rmse": 0.0010689638807992044,
+      "contour_energy": 68.79672147266723,
+      "static_brightness_ratio": 1.0,
+      "seconds_per_frame": 0.8354976177215576
+    },
+    "gaussian_baseline": {
+      "rmse": 0.101487004766708,
+      "contour_energy": 43.99070308204544,
+      "static_brightness_ratio": 0.8998955504758074
+    },
+    "ground_truth": {
+      "contour_energy": 68.84589083583914
+    },
+    "pixels_with_multiple_segments": 88
+  },
+  "occlusion": {
+    "naive": {
+      "rmse": 0.056839651323451756,
+      "contour_energy": 71.15839356780306,
+      "static_brightness_ratio": 0.9259355023533538,
+      "seconds_per_frame": 0.6795186996459961
+    },
+    "center_depth": {
+      "rmse": 0.07097843340331984,
+      "contour_energy": 69.07495620737501,
+      "static_brightness_ratio": 0.933635906859002,
+      "seconds_per_frame": 0.42131686210632324
+    },
+    "visibility": {
+      "rmse": 0.003193176294777288,
+      "contour_energy": 68.49597815337876,
+      "static_brightness_ratio": 0.9999959790659686,
+      "seconds_per_frame": 1.1975305080413818
+    },
+    "time_split": {
+      "rmse": 0.0016991898692394567,
+      "contour_energy": 68.5620321819018,
+      "static_brightness_ratio": 0.9999952797730941,
+      "seconds_per_frame": 2.4567160606384277
+    },
+    "gaussian_baseline": {
+      "rmse": 0.09112391431595562,
+      "contour_energy": 38.02843940948739,
+      "static_brightness_ratio": 0.8532105215679998
+    },
+    "ground_truth": {
+      "contour_energy": 68.61753247616916
+    },
+    "pixels_with_multiple_segments": 601
+  }
+}

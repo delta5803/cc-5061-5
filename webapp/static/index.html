@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shutter Smear Motion-Analysis Player</title>
+<style>
+  :root {
+    --bg: #14171d;
+    --panel: #1d222b;
+    --panel2: #252c38;
+    --line: #343d4c;
+    --text: #dfe5ee;
+    --muted: #8b96a7;
+    --accent: #ff7840;
+    --accent2: #52b6ff;
+    --err: #ff6b6b;
+    --ok: #5fd08a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.45 -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    padding: 14px 20px 10px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 16px;
+    padding: 16px 20px 24px;
+    align-items: start;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .panel h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .control { margin-bottom: 13px; }
+  .control label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .control label .val { color: var(--text); font-variant-numeric: tabular-nums; }
+  .control input[type=range] { width: 100%; accent-color: var(--accent); }
+  .control input[readonly], .control input:disabled { opacity: .55; }
+  select, .control input[type=number] {
+    width: 100%;
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent2); }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1b120b;
+    font-weight: 600;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .check input { accent-color: var(--accent); }
+  .error-box {
+    display: none;
+    background: rgba(255, 107, 107, .12);
+    border: 1px solid var(--err);
+    color: #ffb3b3;
+    border-radius: 8px;
+    padding: 9px 11px;
+    margin-top: 8px;
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+  .error-box.show { display: block; }
+  .error-box .tag {
+    display: inline-block;
+    background: var(--err);
+    color: #230d0d;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-right: 6px;
+    font-size: 11px;
+  }
+  .stage { display: flex; flex-direction: column; gap: 14px; }
+  .canvas-wrap {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .canvas-wrap h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+    margin: 0 0 10px;
+    display: flex;
+    justify-content: space-between;
+  }
+  canvas {
+    width: 100%;
+    max-width: 640px;
+    background: #0c0e12;
+    border-radius: 6px;
+    display: block;
+  }
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .metric {
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .metric .k { color: var(--muted); font-size: 11px; }
+  .metric .v {
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+  }
+  .transport {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+  }
+  .transport input[type=range] { flex: 1; accent-color: var(--accent2); }
+  .legend { color: var(--muted); font-size: 11px; margin-top: 8px; }
+  .legend .sw {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin: 0 4px 0 10px;
+    vertical-align: -1px;
+  }
+  .spin {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: sp 0.8s linear infinite;
+    vertical-align: -2px;
+    margin-right: 6px;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .busy { color: var(--accent2); font-size: 12px; min-height: 16px; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>快门拖影运动分析播放器 · Shutter Smear Player</h1>
+  <span class="sub">
+    沿像素运动路径在曝光区间内积分光 · exposure E 与帧间隔 dt 分离
+  </span>
+</header>
+
+<div class="layout">
+  <!-- ====================================================== control panel -->
+  <aside class="panel" id="controls">
+    <h2>快门内核 Shutter kernel</h2>
+
+    <div class="control">
+      <label>场景 Scene</label>
+      <select id="scene"></select>
+    </div>
+
+    <div class="control">
+      <label>积分器 Integrator</label>
+      <select id="method"></select>
+    </div>
+
+    <div id="kernel-controls"></div>
+
+    <label class="check">
+      <input type="checkbox" id="show-paths" checked>
+      显示采样路径与曝光带 sampling paths + exposure band
+    </label>
+
+    <div class="row">
+      <button id="play" class="primary">▶ 播放 Play</button>
+      <button id="snapshot">导出帧 PNG</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="export-mp4">导出 MP4</button>
+      <button id="export-gif">导出 GIF</button>
+    </div>
+
+    <div class="error-box" id="error-box">
+      <span class="tag">KERNEL</span><span id="error-text"></span>
+    </div>
+    <div class="busy" id="busy" style="margin-top:8px"></div>
+  </aside>
+
+  <!-- ============================================================ stage -->
+  <main class="stage">
+    <section class="canvas-wrap">
+      <h2>
+        <span>快门拖影结果 Result (motion blur + integration paths)</span>
+        <span id="frame-tag"></span>
+      </h2>
+      <canvas id="result-canvas" width="640" height="512"></canvas>
+      <div class="legend">
+        <span class="sw" style="background:#ff503c"></span>像素曝光积分路径
+        <span class="sw" style="background:#ff7840"></span>曝光区间 E
+        <span class="sw" style="background:#c8c8c8"></span>帧中心 tick / dt
+      </div>
+      <div class="transport">
+        <button id="step-back">‹</button>
+        <input type="range" id="frame-slider" min="0" value="4">
+        <button id="step-fwd">›</button>
+      </div>
+    </section>
+
+    <section class="canvas-wrap">
+      <h2><span>指标 Metrics (vs 高采样物理真值)</span></h2>
+      <div class="metrics">
+        <div class="metric">
+          <div class="k">RMSE vs ground truth</div>
+          <div class="v" id="m-rmse">–</div>
+        </div>
+        <div class="metric">
+          <div class="k">轮廓能量 contour energy</div>
+          <div class="v" id="m-contour">–</div>
+        </div>
+        <div class="metric">
+          <div class="k">多遮挡段像素 pixels w/ multiple segments</div>
+          <div class="v" id="m-seg">–</div>
+        </div>
+        <div class="metric">
+          <div class="k">平均采样权重 mean weight (归一化)</div>
+          <div class="v" id="m-weight">–</div>
+        </div>
+      </div>
+      <div class="legend" id="kernel-readout"></div>
+    </section>
+  </main>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
