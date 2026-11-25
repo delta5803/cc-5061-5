@@ -1,28 +1,28 @@
 {
   "constant": {
     "naive": {
-      "rmse": 0.030320256123605574,
-      "contour_energy": 69.65058471507604,
-      "static_brightness_ratio": 0.9267141972878842,
-      "seconds_per_frame": 0.5943148136138916
+      "rmse": 0.030741681455702396,
+      "contour_energy": 69.20063159842232,
+      "static_brightness_ratio": 0.9294503743128811,
+      "seconds_per_frame": 0.3500699996948242
     },
     "center_depth": {
-      "rmse": 0.04656623099330339,
-      "contour_energy": 69.36735281742925,
-      "static_brightness_ratio": 0.9318744741892021,
-      "seconds_per_frame": 0.5247762203216553
+      "rmse": 0.02971679040751492,
+      "contour_energy": 69.61647796053958,
+      "static_brightness_ratio": 0.9315359711537574,
+      "seconds_per_frame": 0.3864438533782959
     },
     "visibility": {
       "rmse": 0.0024143602656012987,
       "contour_energy": 71.32287241817914,
       "static_brightness_ratio": 1.0000011701392935,
-      "seconds_per_frame": 0.6852936744689941
+      "seconds_per_frame": 0.6972320079803467
     },
     "time_split": {
       "rmse": 0.0013204538805106256,
       "contour_energy": 71.35966163227837,
       "static_brightness_ratio": 1.00000112138349,
-      "seconds_per_frame": 2.019774913787842
+      "seconds_per_frame": 1.3235177993774414
     },
     "gaussian_baseline": {
       "rmse": 0.13018415742601433,
@@ -36,28 +36,28 @@
   },
   "turning": {
     "naive": {
-      "rmse": 0.013038377117882341,
-      "contour_energy": 67.69994232416893,
+      "rmse": 0.025261154526518698,
+      "contour_energy": 69.10484132175222,
       "static_brightness_ratio": 0.929243141431945,
-      "seconds_per_frame": 0.26633334159851074
+      "seconds_per_frame": 0.2796933650970459
     },
     "center_depth": {
-      "rmse": 0.04834766318784352,
-      "contour_energy": 69.551272061616,
+      "rmse": 0.02488208824030516,
+      "contour_energy": 69.10595502882293,
       "static_brightness_ratio": 0.929243141431945,
-      "seconds_per_frame": 0.25069665908813477
+      "seconds_per_frame": 0.31642913818359375
     },
     "visibility": {
       "rmse": 0.0023106029732964,
       "contour_energy": 68.73899181315389,
       "static_brightness_ratio": 1.0,
-      "seconds_per_frame": 0.3238363265991211
+      "seconds_per_frame": 0.4149942398071289
     },
     "time_split": {
       "rmse": 0.0010689638807992044,
       "contour_energy": 68.79672147266723,
       "static_brightness_ratio": 1.0,
-      "seconds_per_frame": 0.8354976177215576
+      "seconds_per_frame": 0.7741172313690186
     },
     "gaussian_baseline": {
       "rmse": 0.101487004766708,
@@ -71,28 +71,28 @@
   },
   "occlusion": {
     "naive": {
-      "rmse": 0.056839651323451756,
-      "contour_energy": 71.15839356780306,
-      "static_brightness_ratio": 0.9259355023533538,
-      "seconds_per_frame": 0.6795186996459961
+      "rmse": 0.07369884014778329,
+      "contour_energy": 71.2792303569919,
+      "static_brightness_ratio": 0.9299407022951727,
+      "seconds_per_frame": 0.4835624694824219
     },
     "center_depth": {
-      "rmse": 0.07097843340331984,
-      "contour_energy": 69.07495620737501,
-      "static_brightness_ratio": 0.933635906859002,
-      "seconds_per_frame": 0.42131686210632324
+      "rmse": 0.06215926956109777,
+      "contour_energy": 69.01297336334804,
+      "static_brightness_ratio": 0.9335310032583453,
+      "seconds_per_frame": 0.5416526794433594
     },
     "visibility": {
       "rmse": 0.003193176294777288,
       "contour_energy": 68.49597815337876,
       "static_brightness_ratio": 0.9999959790659686,
-      "seconds_per_frame": 1.1975305080413818
+      "seconds_per_frame": 0.9471049308776855
     },
     "time_split": {
       "rmse": 0.0016991898692394567,
       "contour_energy": 68.5620321819018,
       "static_brightness_ratio": 0.9999952797730941,
-      "seconds_per_frame": 2.4567160606384277
+      "seconds_per_frame": 1.9513294696807861
     },
     "gaussian_baseline": {
       "rmse": 0.09112391431595562,

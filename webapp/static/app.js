@@ -10,10 +10,14 @@
 const state = {
   config: null,
   scene: null,
-  method: "time_split",
+  method: "rolling",
   frame: 4,
   angle: 180,
   samples: 32,
+  readout: 0.9,
+  readoutDir: "top_down",
+  exposureDir: "top_down",
+  profile: "trapezoid",
   showPaths: true,
   playing: false,
   playTimer: null,
@@ -32,18 +36,41 @@ async function init() {
   state.frame = d.frame_index;
   state.angle = d.shutter_angle_deg;
   state.samples = d.num_samples;
+  state.readout = d.readout_frac;
+  state.readoutDir = d.readout_direction;
+  state.exposureDir = d.exposure_direction;
+  state.profile = d.exposure_profile;
   state.showPaths = d.show_paths;
 
   fillSelect($("scene"), state.config.scenes, state.scene);
   fillSelect($("method"), state.config.methods, state.method);
+  fillSelect($("ctl-readout-dir"), state.config.directions, state.readoutDir);
+  fillSelect($("ctl-exposure-dir"), state.config.directions, state.exposureDir);
+  fillSelect($("ctl-profile"), state.config.profiles, state.profile);
   buildKernelControls(state.config.ui_schema);
 
   $("frame-slider").max = state.config.num_frames - 1;
   $("frame-slider").value = state.frame;
   $("show-paths").checked = state.showPaths;
+  $("ctl-readout").value = state.readout;
+  updateReadoutLabel();
 
   $("scene").onchange = (e) => { state.scene = e.target.value; schedule(); };
   $("method").onchange = (e) => { state.method = e.target.value; schedule(); };
+  $("ctl-readout-dir").onchange = (e) => {
+    state.readoutDir = e.target.value; schedule();
+  };
+  $("ctl-exposure-dir").onchange = (e) => {
+    state.exposureDir = e.target.value; schedule();
+  };
+  $("ctl-profile").onchange = (e) => {
+    state.profile = e.target.value; schedule();
+  };
+  $("ctl-readout").oninput = (e) => {
+    state.readout = parseFloat(e.target.value);
+    updateReadoutLabel();
+    schedule();
+  };
   $("show-paths").onchange = (e) => {
     state.showPaths = e.target.checked;
     schedule();
@@ -59,7 +86,46 @@ async function init() {
   $("export-mp4").onclick = () => exportClip("mp4");
   $("export-gif").onclick = () => exportClip("gif");
 
+  await loadAssets();
   await render(true);
+}
+
+function updateReadoutLabel() {
+  const dt = state.config.frame_interval;
+  $("val-readout").textContent =
+    `${state.readout.toFixed(2)} · R=${(state.readout * dt * 1000).toFixed(2)} ms`;
+}
+
+async function loadAssets() {
+  const host = $("asset-list");
+  try {
+    const res = await fetch("/api/assets");
+    const payload = await res.json();
+    if (!payload.assets.length) {
+      host.textContent = "未发现样片资源（先运行 CLI author）";
+      return;
+    }
+    host.innerHTML = "";
+    for (const asset of payload.assets) {
+      const item = document.createElement("div");
+      item.className = "asset-item";
+      const verified = Object.values(asset.hashes_ok).every(Boolean);
+      item.innerHTML =
+        `<div><strong>${asset.name}</strong> ` +
+        `<span class="${verified ? "ok" : "bad"}">` +
+        `${verified ? "哈希已核验" : "哈希不符"}</span></div>` +
+        `<div class="meta">变体: ${asset.variants.join(", ")} · ` +
+        `源轨迹采样 ${asset.trajectory_samples} 点 · 点击载入转盘场景</div>`;
+      item.onclick = () => {
+        state.scene = "dial";
+        $("scene").value = "dial";
+        schedule();
+      };
+      host.appendChild(item);
+    }
+  } catch (err) {
+    host.textContent = "样片列表加载失败: " + String(err);
+  }
 }
 
 function fillSelect(sel, values, chosen) {
@@ -170,6 +236,10 @@ function query(extra = {}) {
     method: state.method,
     angle: state.angle,
     samples: state.samples,
+    readout: state.readout,
+    readout_dir: state.readoutDir,
+    exposure_dir: state.exposureDir,
+    profile: state.profile,
     paths: state.showPaths ? "1" : "0",
     ...extra,
   });
@@ -251,7 +321,13 @@ function updateMetrics(payload) {
   $("kernel-readout").textContent =
     `θ=${k.shutter_angle_deg.toFixed(1)}° · E=${(k.exposure * 1000)
       .toFixed(2)} ms · dt=${(k.frame_interval * 1000).toFixed(2)} ms ` +
-    `· 位移=速度×E（像素长度，不等于曝光时长）· N=${k.num_samples}`;
+    `· R=${(k.readout_duration * 1000).toFixed(2)} ms ` +
+    `(${k.is_rolling ? "rolling" : "global"}) · ` +
+    `轮廓=${k.exposure_profile} · 读出=${k.readout_direction} · ` +
+    `曝光=${k.exposure_direction} · N=${k.num_samples}`;
+  $("m-rowoffset").textContent =
+    `${(k.row_offset_first * 1000).toFixed(2)} ms → ` +
+    `${(k.row_offset_last * 1000).toFixed(2)} ms`;
 }
 
 function setBusy(on) {

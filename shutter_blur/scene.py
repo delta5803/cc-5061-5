@@ -47,24 +47,41 @@ class Layer:
     color: tuple[float, float, float]
     pattern: str = "solid"
     # Motion: p(t) = p0 + v*t + 0.5*a*t^2, plus angular velocity omega (rad/s)
+    # and an optional sinusoidal oscillation A*sin(2*pi*f*t + phase) on top,
+    # which gives genuinely non-uniform velocity (curved exposure paths).
     p0: tuple[float, float] = (0.0, 0.0)
     velocity: tuple[float, float] = (0.0, 0.0)
     accel: tuple[float, float] = (0.0, 0.0)
     omega: float = 0.0
+    osc_amp: tuple[float, float] = (0.0, 0.0)
+    osc_freq: float = 0.0
+    osc_phase: float = 0.0
 
-    def center(self, t: float) -> np.ndarray:
-        return np.array(
-            [
-                self.p0[0] + self.velocity[0] * t + 0.5 * self.accel[0] * t * t,
-                self.p0[1] + self.velocity[1] * t + 0.5 * self.accel[1] * t * t,
-            ],
-            dtype=np.float64,
-        )
+    def center(self, t) -> np.ndarray:
+        t_arr = np.asarray(t, dtype=np.float64)
+        osc = 0.0
+        if self.osc_freq:
+            osc = np.sin(2.0 * np.pi * self.osc_freq * t_arr
+                         + self.osc_phase)
+        x = (self.p0[0] + self.velocity[0] * t_arr
+             + 0.5 * self.accel[0] * t_arr * t_arr
+             + self.osc_amp[0] * osc)
+        y = (self.p0[1] + self.velocity[1] * t_arr
+             + 0.5 * self.accel[1] * t_arr * t_arr
+             + self.osc_amp[1] * osc)
+        if t_arr.ndim == 0:
+            return np.array([float(x), float(y)], dtype=np.float64)
+        return np.stack([x, y], axis=-1)
 
     def velocity_at(self, t: float) -> np.ndarray:
+        osc_d = 0.0
+        if self.osc_freq:
+            osc_d = (2.0 * np.pi * self.osc_freq
+                     * np.cos(2.0 * np.pi * self.osc_freq * t
+                              + self.osc_phase))
         return np.array(
-            [self.velocity[0] + self.accel[0] * t,
-             self.velocity[1] + self.accel[1] * t],
+            [self.velocity[0] + self.accel[0] * t + self.osc_amp[0] * osc_d,
+             self.velocity[1] + self.accel[1] * t + self.osc_amp[1] * osc_d],
             dtype=np.float64,
         )
 
@@ -72,6 +89,10 @@ class Layer:
         x = local_xy[..., 0]
         y = local_xy[..., 1]
         if self.kind == "rect":
+            w, h = self.size
+            return (np.abs(x) <= w / 2.0) & (np.abs(y) <= h / 2.0)
+        if self.kind == "vstrip":
+            # A tall, very narrow vertical bar: width drives the smear width.
             w, h = self.size
             return (np.abs(x) <= w / 2.0) & (np.abs(y) <= h / 2.0)
         if self.kind == "disc":
@@ -91,7 +112,11 @@ class Scene:
         self._render_cache: dict[float, tuple[np.ndarray, np.ndarray]] = {}
         self._alpha_cache: dict[float, np.ndarray] = {}
         self._soft_cache: dict[float, np.ndarray] = {}
-        self._cache_limit = 96
+        # rolling-shutter passes touch one distinct time per row per sample,
+        # so the cache must stay small to bound peak memory
+        self._cache_limit = 32
+        # optional per-layer custom composite hook: layer_id -> fn(local, rgb)
+        self._composite_hooks: dict = {}
 
     def _trim(self, cache: dict) -> None:
         if len(cache) > self._cache_limit:
@@ -109,17 +134,19 @@ class Scene:
         return xx.astype(np.float64) + 0.5, yy.astype(np.float64) + 0.5
 
     # --------------------------------------------------------------- rendering
-    def _local_coords(self, t: float, layer: Layer,
+    def _local_coords(self, t, layer: Layer,
                       points_xy: np.ndarray | None = None) -> np.ndarray:
         if points_xy is None:
             x, y = self.pixel_grid()
             pts = np.stack([x, y], axis=-1)
         else:
             pts = points_xy
-        cx, cy = layer.center(t)
-        angle = layer.omega * t
+        centre = np.asarray(layer.center(float(t) if np.ndim(t) == 0
+                                         else t), dtype=np.float64)
+        angle = layer.omega * np.asarray(t, dtype=np.float64)
         ca, sa = np.cos(angle), np.sin(angle)
-        delta = pts - np.array([cx, cy])
+        # centre is (2,) for a scalar time or (H, W, 2) for per-pixel times
+        delta = pts - centre
         lx = ca * delta[..., 0] + sa * delta[..., 1]
         ly = -sa * delta[..., 0] + ca * delta[..., 1]
         return np.stack([lx, ly], axis=-1)
@@ -127,8 +154,8 @@ class Scene:
     def _alpha_at(self, layer: Layer, local_xy: np.ndarray) -> np.ndarray:
         """Analytic fraction of a unit photosite centred at local_xy covered."""
         x, y = local_xy[..., 0], local_xy[..., 1]
-        if layer.kind == "rect":
-            w, h = self_size = layer.size
+        if layer.kind in ("rect", "vstrip"):
+            w, h = layer.size
             ax = _edge_coverage(x, w / 2.0)
             ay = _edge_coverage(y, h / 2.0)
             return np.clip(ax * ay, 0.0, 1.0)
@@ -190,11 +217,14 @@ class Scene:
         ids = np.zeros((self.height, self.width), dtype=np.int64)
         for layer in self.layers:
             local = self._local_coords(t, layer, pts)
-            alpha = self._alpha_at(layer, local)
-            tex = _pattern_texture(layer.pattern, local[..., 0],
-                                   local[..., 1], layer.color)
-            a = alpha[..., None]
-            rgb = tex * a + rgb * (1.0 - a)
+            if layer.layer_id in self._composite_hooks:
+                rgb, alpha = self._composite_hooks[layer.layer_id](local, rgb)
+            else:
+                alpha = self._alpha_at(layer, local)
+                tex = _pattern_texture(layer.pattern, local[..., 0],
+                                       local[..., 1], layer.color)
+                a = alpha[..., None]
+                rgb = tex * a + rgb * (1.0 - a)
             ids[alpha > 0.5] = layer.layer_id
         result = (rgb, ids)
         self._render_cache[key] = result
@@ -203,6 +233,42 @@ class Scene:
 
     def id_map(self, t: float) -> np.ndarray:
         return self.render(t)[1]
+
+    def render_strip(self, y0: int, y1: int, t: float):
+        """Composite, soft weights and owner colour for rows [y0, y1) only.
+
+        Scalar time and a narrow strip: this is the rolling-shutter hot path,
+        where rendering whole frames for every row would dominate the cost.
+        Returns ``(rgb, soft_weights, owner_rgb)`` with ``owner_rgb`` holding
+        each layer's intrinsic (un-composited) colour stacked per channel.
+        """
+        yy, xx = np.mgrid[y0:y1, 0: self.width]
+        pts = np.stack([xx.astype(np.float64) + 0.5,
+                        yy.astype(np.float64) + 0.5], axis=-1)
+        rgb = _pattern_texture(self.bg_pattern, pts[..., 0], pts[..., 1],
+                               self.bg_color)
+        n_layer = len(self.layers)
+        weights = np.zeros(pts.shape[:-1] + (n_layer + 1,),
+                           dtype=np.float64)
+        owner_rgb = np.zeros(pts.shape[:-1] + (3,), dtype=np.float64)
+        transmittance = np.ones(pts.shape[:-1], dtype=np.float64)
+        for k, layer in enumerate(self.layers):
+            local = self._local_coords(float(t), layer, pts)
+            if layer.layer_id in self._composite_hooks:
+                rgb, alpha = self._composite_hooks[layer.layer_id](local, rgb)
+            else:
+                alpha = self._alpha_at(layer, local)
+                tex = _pattern_texture(layer.pattern, local[..., 0],
+                                       local[..., 1], layer.color)
+                a = alpha[..., None]
+                rgb = tex * a + rgb * (1.0 - a)
+            weights[..., k + 1] = alpha * transmittance
+            transmittance = transmittance * (1.0 - alpha)
+            owner_rgb = np.where((alpha > 0.5)[..., None], rgb, owner_rgb)
+        weights[..., BG_LAYER_ID] = transmittance
+        bg_pixels = weights[..., BG_LAYER_ID] > 0.5
+        owner_rgb[bg_pixels] = rgb[bg_pixels]
+        return rgb, weights, owner_rgb
 
     def soft_id_stack(self, t: float,
                       points_xy: np.ndarray | None = None) -> np.ndarray:
@@ -282,6 +348,8 @@ class Scene:
         y_idx = np.clip(np.round(pts[..., 1] - 0.5).astype(np.int64),
                         0, self.height - 1)
         visible_ids = ids[y_idx, x_idx]
+        t_to_arr = np.broadcast_to(np.asarray(t_to, dtype=np.float64),
+                                   pts.shape[:-1])
         for layer in self.layers:
             m = visible_ids == layer.layer_id
             if not m.any():
@@ -289,16 +357,22 @@ class Scene:
             p = pts[m]
             c_from = layer.center(t_from)
             rel = p - c_from
+            dt = (t_to_arr - t_from)[m]
             if layer.omega != 0.0:
-                dtheta = layer.omega * (t_to - t_from)
+                dtheta = layer.omega * dt
                 ca, sa = np.cos(dtheta), np.sin(dtheta)
                 rx = ca * rel[:, 0] - sa * rel[:, 1]
                 ry = sa * rel[:, 0] + ca * rel[:, 1]
                 rel = np.stack([rx, ry], axis=-1)
-            dt = t_to - t_from
-            shift = (np.array(layer.velocity) * dt
-                     + 0.5 * np.array(layer.accel) * dt ** 2)
-            out[m] = layer.center(t_to) + rel + shift
+            # evaluate the centre at every (possibly per-pixel) target time;
+            # layer.center already contains translation, acceleration and the
+            # optional oscillation, so no extra shift term is added
+            target_times = t_to_arr[m]
+            cto = np.empty((m.sum(), 2), dtype=np.float64)
+            for tt in np.unique(target_times):
+                sel = target_times == tt
+                cto[sel] = layer.center(float(tt))
+            out[m] = cto + rel
         return out
 
 
@@ -368,3 +442,12 @@ SCENES = {
     "turning": turning_scene,
     "occlusion": occlusion_scene,
 }
+
+
+def _dial_scene_factory(h: int = 256, w: int = 320):
+    # lazy import: demo_scenes imports symbols from this module
+    from .demo_scenes import dial_scene
+    return dial_scene(h, w)
+
+
+SCENES["dial"] = _dial_scene_factory

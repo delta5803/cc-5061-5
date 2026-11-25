@@ -35,6 +35,7 @@ from shutter_blur import (  # noqa: E402
     motion_roi,
     rmse,
 )
+from shutter_blur.assets import load_asset  # noqa: E402
 from shutter_blur.integrators import (  # noqa: E402
     SceneVisibilityProvider,
     segment_count_map,
@@ -44,12 +45,20 @@ from shutter_blur.io import (  # noqa: E402
     draw_shutter_band,
     to_uint8,
 )
+from shutter_blur.kernel import DIRECTIONS, PROFILES  # noqa: E402
 from shutter_blur.motion import SceneMotionField  # noqa: E402
+from shutter_blur.rolling import (  # noqa: E402
+    render_rolling,
+    rolling_ground_truth,
+)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+ROOT = Path(__file__).resolve().parents[1]
+ASSET_ROOT = ROOT / "outputs" / "shutter_demo" / "assets"
 DT = 1.0 / 24.0
 NUM_FRAMES = 12
 CACHE_LIMIT = 24
+GT_SAMPLES = 64
 
 
 class SceneCache:
@@ -78,10 +87,19 @@ class SceneCache:
         return self._provider[name]
 
     def render(self, name, frame_index, method, angle, num_samples,
+               readout_frac=0.0, readout_direction="top_down",
+               exposure_direction="top_down", exposure_profile="box",
                show_paths=True):
         scene = self.scene(name)
-        kernel = ShutterKernel.from_angle(float(angle), DT, int(num_samples))
-        key = (name, frame_index, method, round(angle, 4), num_samples)
+        kernel = ShutterKernel.from_angle(
+            float(angle), DT, int(num_samples),
+            readout_duration=float(readout_frac) * DT,
+            readout_direction=readout_direction,
+            exposure_direction=exposure_direction,
+            exposure_profile=exposure_profile)
+        key = (name, frame_index, method, round(angle, 4), num_samples,
+               round(readout_frac, 4), readout_direction,
+               exposure_direction, exposure_profile)
         with self._lock:
             if key in self._frames:
                 self._frames.move_to_end(key)
@@ -92,7 +110,7 @@ class SceneCache:
                 result = _render_method(
                     scene, self.motion(name), self.provider(name),
                     kernel, t, method, clean)
-                gt = _fixed_pixel_gt(scene, kernel, t)
+                gt = _rolling_ref(scene, kernel, t)
                 roi = motion_roi(gt, clean)
                 seg = segment_count_map(
                     self.provider(name), _grid(scene), t, kernel,
@@ -110,6 +128,9 @@ class SceneCache:
                     "contour_energy": float(
                         contour_energy(result.image, roi)),
                     "segments_multi": int((seg > 1).sum()),
+                    "is_rolling": kernel.is_rolling,
+                    "sample_weights": kernel.weights(),
+                    "row_offsets": kernel.exposure_row_offsets(scene.height),
                 }
                 self._frames[key] = bundle
                 self._frames.move_to_end(key)
@@ -124,16 +145,16 @@ def _grid(scene):
 
 
 def _render_method(scene, motion, provider, kernel, t, method, clean):
+    if method == "rolling":
+        return render_rolling(clean, motion, kernel, t, provider)
     from shutter_blur.integrators import render_shutter
     return render_shutter(clean, motion, kernel, t, method, provider)
 
 
-def _fixed_pixel_gt(scene, kernel, t, samples=256):
-    offs = np.linspace(-kernel.exposure / 2, kernel.exposure / 2, samples)
-    acc = np.zeros((scene.height, scene.width, 3))
-    for tau in offs:
-        acc += scene.render(t + tau)[0]
-    return np.clip(acc / samples, 0.0, 1.0)
+def _rolling_ref(scene, kernel, t):
+    # one reference implementation for global and rolling: R=0 reduces it to
+    # the fixed-photosite global shutter integral
+    return rolling_ground_truth(scene, kernel, t, GT_SAMPLES)
 
 
 CACHE = SceneCache()
@@ -202,6 +223,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._serve_file("app.js", "application/javascript")
             if path == "/api/config":
                 return self._config()
+            if path == "/api/assets":
+                return self._assets()
             if path == "/api/render":
                 return self._render(qs)
             if path == "/api/frame":
@@ -233,27 +256,39 @@ class Handler(BaseHTTPRequestHandler):
         sample_kernel = ShutterKernel.from_angle(180.0, DT, 32)
         self._send_json({
             "scenes": sorted(SCENES),
-            "methods": list(METHODS),
+            "methods": ["rolling", *METHODS],
+            "profiles": list(PROFILES),
+            "directions": list(DIRECTIONS),
             "frame_interval": DT,
             "num_frames": NUM_FRAMES,
             "ui_schema": sample_kernel.ui_schema(),
             "defaults": {
-                "scene": "occlusion",
+                "scene": "dial",
                 "frame_index": 4,
-                "method": "time_split",
+                "method": "rolling",
                 "shutter_angle_deg": 180.0,
                 "num_samples": 32,
+                "readout_frac": 0.9,
+                "readout_direction": "top_down",
+                "exposure_direction": "top_down",
+                "exposure_profile": "trapezoid",
                 "show_paths": True,
             },
         })
 
     def _params(self, qs):
         return {
-            "scene": self._one(qs, "scene", "occlusion"),
+            "scene": self._one(qs, "scene", "dial"),
             "frame_index": int(self._one(qs, "frame", 4)),
-            "method": self._one(qs, "method", "time_split"),
+            "method": self._one(qs, "method", "rolling"),
             "angle": float(self._one(qs, "angle", 180.0)),
             "num_samples": int(self._one(qs, "samples", 32)),
+            "readout_frac": float(self._one(qs, "readout", 0.9)),
+            "readout_direction": self._one(
+                qs, "readout_dir", "top_down"),
+            "exposure_direction": self._one(
+                qs, "exposure_dir", "top_down"),
+            "exposure_profile": self._one(qs, "profile", "trapezoid"),
             "show_paths": self._one(qs, "paths", "1") != "0",
         }
 
@@ -261,10 +296,26 @@ class Handler(BaseHTTPRequestHandler):
         if not 0 <= p["frame_index"] < NUM_FRAMES:
             raise ShutterError(
                 f"frame index {p['frame_index']} outside [0, {NUM_FRAMES - 1}]")
-        if p["method"] not in METHODS:
+        all_methods = ["rolling", *METHODS]
+        if p["method"] not in all_methods:
             raise ShutterError(f"unknown method {p['method']!r}")
+        if p["readout_direction"] not in DIRECTIONS:
+            raise ShutterError(
+                f"readout_direction must be one of {DIRECTIONS}")
+        if p["exposure_direction"] not in DIRECTIONS:
+            raise ShutterError(
+                f"exposure_direction must be one of {DIRECTIONS}")
+        if p["exposure_profile"] not in PROFILES:
+            raise ShutterError(
+                f"exposure_profile must be one of {PROFILES}")
+        if not 0.0 <= p["readout_frac"] <= 1.0:
+            raise ShutterError("readout fraction must lie in [0, 1]")
         kernel = ShutterKernel.from_angle(
-            p["angle"], DT, p["num_samples"])  # raises ShutterError
+            p["angle"], DT, p["num_samples"],
+            readout_duration=p["readout_frac"] * DT,
+            readout_direction=p["readout_direction"],
+            exposure_direction=p["exposure_direction"],
+            exposure_profile=p["exposure_profile"])  # raises ShutterError
         return kernel
 
     def _render(self, qs):
@@ -272,8 +323,8 @@ class Handler(BaseHTTPRequestHandler):
         kernel = self._validate(p)
         bundle = CACHE.render(
             p["scene"], p["frame_index"], p["method"], p["angle"],
-            p["num_samples"], p["show_paths"])
-        overlay = _build_overlay(bundle, p["frame_index"], p["show_paths"])
+            p["num_samples"], p["readout_frac"], p["readout_direction"],
+            p["exposure_direction"], p["exposure_profile"], p["show_paths"])
         self._send_json({
             "image_png": "/api/frame?" + parsed_render_query(qs, p),
             "metrics": {
@@ -288,7 +339,15 @@ class Handler(BaseHTTPRequestHandler):
                 "exposure": kernel.exposure,
                 "frame_interval": kernel.frame_interval,
                 "num_samples": kernel.num_samples,
+                "readout_duration": kernel.readout_duration,
+                "readout_direction": kernel.readout_direction,
+                "exposure_direction": kernel.exposure_direction,
+                "exposure_profile": kernel.exposure_profile,
+                "is_rolling": kernel.is_rolling,
+                "row_offset_first": float(bundle["row_offsets"][0]),
+                "row_offset_last": float(bundle["row_offsets"][-1]),
             },
+            "profile_weights": [float(x) for x in bundle["sample_weights"]],
             "t_center": bundle["t_center"],
             "overlay_ready": True,
         })
@@ -298,9 +357,42 @@ class Handler(BaseHTTPRequestHandler):
         self._validate(p)
         bundle = CACHE.render(
             p["scene"], p["frame_index"], p["method"], p["angle"],
-            p["num_samples"], p["show_paths"])
+            p["num_samples"], p["readout_frac"], p["readout_direction"],
+            p["exposure_direction"], p["exposure_profile"], p["show_paths"])
         overlay = _build_overlay(bundle, p["frame_index"], p["show_paths"])
         self._send_png(overlay)
+
+    def _assets(self):
+        """List the on-disk shutter demo assets (must physically exist)."""
+        items = []
+        if ASSET_ROOT.exists():
+            for manifest_path in sorted(ASSET_ROOT.glob("*/manifest.json")):
+                bundle = load_asset(manifest_path.parent)
+                manifest = bundle["manifest"]
+                traj = bundle["trajectory"]
+                items.append({
+                    "name": manifest["spec"]["name"],
+                    "dir": str(manifest_path.parent.relative_to(ROOT)),
+                    "variants": list(manifest["kernels"].keys()),
+                    "trajectory_samples": int(len(traj["time"])),
+                    "frames": manifest["files"]["frames"],
+                    "hashes_ok": self._verify_hashes(manifest_path.parent,
+                                                     manifest),
+                })
+        self._send_json({"assets": items})
+
+    @staticmethod
+    def _verify_hashes(asset_dir, manifest):
+        ok = {}
+        for name, digest in manifest.get("file_hashes", {}).items():
+            if name == "manifest.json":
+                continue
+            target = Path(asset_dir) / name
+            import hashlib
+            ok[name] = (target.is_file()
+                        and hashlib.sha256(target.read_bytes()).hexdigest()
+                        == digest)
+        return ok
 
     def _export(self, qs):
         from shutter_blur.io import write_video
@@ -311,6 +403,8 @@ class Handler(BaseHTTPRequestHandler):
         for fi in range(NUM_FRAMES):
             bundle = CACHE.render(
                 p["scene"], fi, p["method"], p["angle"], p["num_samples"],
+                p["readout_frac"], p["readout_direction"],
+                p["exposure_direction"], p["exposure_profile"],
                 show_paths=False)
             frames.append(bundle["image"])
         buf = io.BytesIO()
@@ -334,6 +428,10 @@ def parsed_render_query(qs, p):
         "scene": p["scene"], "frame": p["frame_index"],
         "method": p["method"], "angle": p["angle"],
         "samples": p["num_samples"],
+        "readout": p["readout_frac"],
+        "readout_dir": p["readout_direction"],
+        "exposure_dir": p["exposure_direction"],
+        "profile": p["exposure_profile"],
         "paths": "1" if p["show_paths"] else "0",
     })
 

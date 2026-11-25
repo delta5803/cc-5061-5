@@ -83,7 +83,7 @@ class SceneVisibilityProvider(VisibilityProvider):
         self._id_cache: dict[float, np.ndarray] = {}
         self._rgb_cache: dict[float, np.ndarray] = {}
         self._soft_cache: dict[float, np.ndarray] = {}
-        self._limit = 96
+        self._limit = 32
 
     def _trim(self, cache):
         if len(cache) > self._limit:
@@ -142,12 +142,25 @@ class SceneVisibilityProvider(VisibilityProvider):
         return vis
 
     def instant_color(self, points_xy, t):
-        """Analytic composite at pixel centres (no extra spatial filtering)."""
-        rgb = self._rgb(float(t))
-        h, w = rgb.shape[:2]
-        xi = np.clip(np.round(points_xy[..., 0] - 0.5).astype(int), 0, w - 1)
-        yi = np.clip(np.round(points_xy[..., 1] - 0.5).astype(int), 0, h - 1)
-        return rgb[yi, xi]
+        """Analytic composite at pixel centres (no extra spatial filtering).
+
+        ``t`` may be a scalar or a per-pixel time map (rolling shutter); the
+        latter evaluates each distinct row time once and gathers rows.
+        """
+        t_arr = np.asarray(t, dtype=np.float64)
+        if t_arr.ndim == 0:
+            rgb = self._rgb(float(t_arr))
+            h, w = rgb.shape[:2]
+            xi = np.clip(np.round(points_xy[..., 0] - 0.5).astype(int), 0, w - 1)
+            yi = np.clip(np.round(points_xy[..., 1] - 0.5).astype(int), 0, h - 1)
+            return rgb[yi, xi]
+        h, w = points_xy.shape[:2]
+        out = np.zeros((h, w, 3), dtype=np.float64)
+        for tv in np.unique(t_arr):
+            rgb = self._rgb(float(tv))
+            rows = np.unique(np.nonzero(t_arr == tv)[0])
+            out[rows] = rgb[rows]
+        return out
 
     def owner_color(self, points_xy, t, owner_layer_id):
         """Intrinsic colour of the owner layer at fixed photosite points.
@@ -155,25 +168,50 @@ class SceneVisibilityProvider(VisibilityProvider):
         No compositing is applied: a silhouette cell keeps the layer's own
         colour while its coverage fraction is carried separately by the
         visibility weight.  Background owners read the static background.
+        Accepts either a scalar time or a per-pixel time map (rolling shutter).
         """
+        from .scene import _pattern_texture
+
         out = np.zeros(points_xy.shape[:-1] + (3,), dtype=np.float64)
         bg_mask = owner_layer_id == 0
         if bg_mask.any():
-            from .scene import _pattern_texture
-
             x = points_xy[..., 0]
             y = points_xy[..., 1]
             out[bg_mask] = _pattern_texture(
                 self.scene.bg_pattern, x, y, self.scene.bg_color)[bg_mask]
+        t_arr = np.asarray(t, dtype=np.float64)
+        hooks = getattr(self.scene, "_composite_hooks", {})
         for layer in self.scene.layers:
             m = owner_layer_id == layer.layer_id
             if not m.any():
                 continue
-            local = self.scene._local_coords(float(t), layer, points_xy[m])
-            from .scene import _pattern_texture
-
-            out[m] = _pattern_texture(layer.pattern, local[..., 0],
-                                      local[..., 1], layer.color)
+            if layer.layer_id in hooks:
+                # composite-hook layers (e.g. the dial) own their own colour
+                black = np.zeros(points_xy.shape[:-1] + (3,),
+                                 dtype=np.float64)
+                if t_arr.ndim == 0:
+                    local = self.scene._local_coords(float(t_arr), layer,
+                                                      points_xy[m])
+                    out[m], _ = hooks[layer.layer_id](local, black[m])
+                else:
+                    local_full = self.scene._local_coords(t_arr, layer,
+                                                          points_xy)
+                    rgb_full, _ = hooks[layer.layer_id](local_full, black)
+                    out[m] = rgb_full[m]
+                continue
+            if t_arr.ndim == 0:
+                local = self.scene._local_coords(float(t_arr), layer,
+                                                  points_xy[m])
+                out[m] = _pattern_texture(layer.pattern, local[..., 0],
+                                          local[..., 1], layer.color)
+            else:
+                # per-pixel times: evaluate local coordinates on the full grid
+                # (masked points with mismatched time shapes cannot share a
+                # call) and keep only this owner's pixels
+                local_full = self.scene._local_coords(t_arr, layer, points_xy)
+                tex = _pattern_texture(layer.pattern, local_full[..., 0],
+                                       local_full[..., 1], layer.color)
+                out[m] = tex[m]
         return out
 
     def background_color(self, points_xy, t, owner_layer_id):
@@ -509,16 +547,19 @@ def ground_truth(scene, kernel: ShutterKernel, t_center: float,
     time-varying scene along the motion path is physically identical to
     integrating light at a fixed photosite, and it shares the exact spatial
     observation model of the path integrators, so their RMSE converges to zero
-    as the number of shutter samples approaches ``gt_samples``.
+    as the number of shutter samples approaches ``gt_samples``.  Samples are
+    weighted by the kernel's exposure profile (equal weights for a box
+    shutter), so non-box shutters have their own matching reference.
     """
     h, w = scene.height, scene.width
     points = pixel_grid(h, w)
     offsets = np.linspace(-kernel.exposure / 2, kernel.exposure / 2, gt_samples)
+    weights = kernel.profile_weights(offsets)
     if motion is None:
         motion = SceneMotionField(scene, curved=True)
     acc = np.zeros((h, w, 3), dtype=np.float64)
-    for tau in offsets:
+    for k, tau in enumerate(offsets):
         path_pts = motion.backtrace(points, t_center, t_center + tau)
         rgb = scene.render(t_center + tau)[0]
-        acc += bilinear_sample(rgb, path_pts, fill=0.0)
-    return np.clip(acc / gt_samples, 0.0, 1.0)
+        acc += weights[k] * bilinear_sample(rgb, path_pts, fill=0.0)
+    return np.clip(acc, 0.0, 1.0)

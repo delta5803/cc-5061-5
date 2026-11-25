@@ -1,4 +1,11 @@
 """Motion-field shutter smear (motion blur) effect toolkit."""
+from .demo_scenes import (
+    DIAL_LAYER_ID,
+    STRIP_LAYER_ID,
+    dial_scene,
+    spoke_world_angle,
+    strip_center_x,
+)
 from .integrators import (
     METHODS,
     gaussian_blur,
@@ -6,7 +13,7 @@ from .integrators import (
     render_shutter,
     segment_count_map,
 )
-from .kernel import ShutterError, ShutterKernel
+from .kernel import DIRECTIONS, PROFILES, ShutterError, ShutterKernel, profile_window
 from .metrics import (
     contour_energy,
     motion_roi,
@@ -27,6 +34,12 @@ from .pipeline import (
     render_scene_frame,
     synthetic_video_source,
 )
+from .rolling import (
+    RollingResult,
+    render_rolling,
+    rolling_ground_truth,
+    row_sample_times,
+)
 from .scene import SCENES, Scene
 
 __all__ = [
@@ -36,5 +49,8 @@ __all__ = [
     "block_match_flow", "consistency_occlusion_mask", "VideoSource",
     "make_scene", "render_scene_frame", "render_all_methods",
     "synthetic_video_source", "rmse", "contour_energy", "motion_roi",
-    "static_roi",
+    "static_roi", "PROFILES", "DIRECTIONS", "profile_window",
+    "render_rolling", "rolling_ground_truth", "row_sample_times",
+    "RollingResult", "dial_scene", "spoke_world_angle", "strip_center_x",
+    "DIAL_LAYER_ID", "STRIP_LAYER_ID",
 ]

@@ -1,0 +1,118 @@
+{
+  "frame_interval": 0.041666666666666664,
+  "t_center": 0.16666666666666666,
+  "scene": "dial",
+  "exposure_window_sweep": [
+    {
+      "shutter_angle_deg": 30.0,
+      "exposure_s": 0.003472222222222222,
+      "readout_duration_s": 0.0,
+      "smear_footprint_px": 215,
+      "row_skew_std_px": 9.214629875957957,
+      "rmse_vs_clean": 0.0021986775980643056
+    },
+    {
+      "shutter_angle_deg": 90.0,
+      "exposure_s": 0.010416666666666666,
+      "readout_duration_s": 0.0,
+      "smear_footprint_px": 3643,
+      "row_skew_std_px": 6.891962553341011,
+      "rmse_vs_clean": 0.013679213583877766
+    },
+    {
+      "shutter_angle_deg": 180.0,
+      "exposure_s": 0.020833333333333332,
+      "readout_duration_s": 0.0,
+      "smear_footprint_px": 6717,
+      "row_skew_std_px": 0.0,
+      "rmse_vs_clean": 0.03118353962823099
+    },
+    {
+      "shutter_angle_deg": 270.0,
+      "exposure_s": 0.03125,
+      "readout_duration_s": 0.0,
+      "smear_footprint_px": 8782,
+      "row_skew_std_px": 25.122527897872253,
+      "rmse_vs_clean": 0.04442358520493391
+    },
+    {
+      "shutter_angle_deg": 360.0,
+      "exposure_s": 0.041666666666666664,
+      "readout_duration_s": 0.0,
+      "smear_footprint_px": 10748,
+      "row_skew_std_px": 45.88655286639115,
+      "rmse_vs_clean": 0.054091641876580526
+    }
+  ],
+  "readout_reorder_sweep": [
+    {
+      "shutter_angle_deg": 180.0,
+      "exposure_s": 0.020833333333333332,
+      "readout_duration_s": 0.0,
+      "readout_frac_of_dt": 0.0,
+      "smear_footprint_px": 6717,
+      "row_skew_std_px": 0.0,
+      "row_skew_slope_px_per_row": 0.0,
+      "rmse_vs_clean": 0.03118353962823099
+    },
+    {
+      "shutter_angle_deg": 180.0,
+      "exposure_s": 0.020833333333333332,
+      "readout_duration_s": 0.010416666666666666,
+      "readout_frac_of_dt": 0.25,
+      "smear_footprint_px": 6792,
+      "row_skew_std_px": 18.356398504298923,
+      "row_skew_slope_px_per_row": -0.3382972504869335,
+      "rmse_vs_clean": 0.03374697847981318
+    },
+    {
+      "shutter_angle_deg": 180.0,
+      "exposure_s": 0.020833333333333332,
+      "readout_duration_s": 0.020833333333333332,
+      "readout_frac_of_dt": 0.5,
+      "smear_footprint_px": 7018,
+      "row_skew_std_px": 35.70203219210494,
+      "row_skew_slope_px_per_row": -0.6600291290347456,
+      "rmse_vs_clean": 0.040459044525939264
+    },
+    {
+      "shutter_angle_deg": 180.0,
+      "exposure_s": 0.020833333333333332,
+      "readout_duration_s": 0.03125,
+      "readout_frac_of_dt": 0.75,
+      "smear_footprint_px": 7358,
+      "row_skew_std_px": 51.62279802484294,
+      "row_skew_slope_px_per_row": -0.9683303222616437,
+      "rmse_vs_clean": 0.04920293358219131
+    },
+    {
+      "shutter_angle_deg": 180.0,
+      "exposure_s": 0.020833333333333332,
+      "readout_duration_s": 0.03958333333333333,
+      "readout_frac_of_dt": 0.95,
+      "smear_footprint_px": 7656,
+      "row_skew_std_px": 64.44020386700541,
+      "row_skew_slope_px_per_row": -1.213640022365726,
+      "rmse_vs_clean": 0.05619486957842977
+    }
+  ],
+  "direction_reversal": {
+    "top_down": {
+      "row_skew_std_px": 61.19698535099786,
+      "row_skew_slope_px_per_row": -1.1515647929415824,
+      "smear_footprint_px": 7586
+    },
+    "bottom_up": {
+      "row_skew_std_px": 66.79341048721047,
+      "row_skew_slope_px_per_row": 1.2645003443079847,
+      "smear_footprint_px": 7566
+    }
+  },
+  "measured_decision": {
+    "exposure_window_controls_smear": true,
+    "readout_reorder_controls_skew": true,
+    "readout_leaves_smear_footprint_nearly_flat": true,
+    "direction_reversal_flips_skew_sign": true,
+    "selection": "vary exposure window for motion smear; reorder readout timing for progressive skew"
+  }
+}

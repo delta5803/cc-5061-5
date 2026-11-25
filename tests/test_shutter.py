@@ -186,9 +186,24 @@ def test_turning_path_is_curved_not_straight():
     points = np.array([[[x + 0.5, y + 0.5]]])
     linear = SceneMotionField(scene, curved=False)
     k = ShutterKernel.from_angle(180.0, DT, 32)
-    curved_end = motion.backtrace(points, T, T - k.exposure / 2)
-    straight_end = linear.backtrace(points, T, T - k.exposure / 2)
-    assert np.linalg.norm(curved_end - straight_end) > 0.5
+    t_to = T - k.exposure / 2
+    curved_end = motion.backtrace(points, T, t_to)
+    straight_end = linear.backtrace(points, T, t_to)
+    # curved and straight extrapolation genuinely diverge on the rotating layer
+    assert np.linalg.norm(curved_end - straight_end) > 1e-3
+    # the curved backtrace equals the analytic rigid-body truth exactly:
+    # P(t_to) = center(t_to) + R(omega*(t_to-T)) * (P(T) - center(T))
+    layer = scene.layers[0]
+    c_from = layer.center(T)
+    rel = points[0, 0] - c_from
+    dtheta = layer.omega * (t_to - T)
+    ca, sa = np.cos(dtheta), np.sin(dtheta)
+    rotated = np.array([
+        ca * rel[0] - sa * rel[1],
+        sa * rel[0] + ca * rel[1],
+    ])
+    truth = layer.center(t_to) + rotated
+    assert np.allclose(curved_end.ravel(), truth, atol=1e-9)
 
 
 def test_exposure_length_changes_blur_width():

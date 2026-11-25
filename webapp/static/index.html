@@ -192,6 +192,22 @@
   }
   @keyframes sp { to { transform: rotate(360deg); } }
   .busy { color: var(--accent2); font-size: 12px; min-height: 16px; }
+  .asset-list {
+    display: flex; flex-direction: column; gap: 6px;
+    max-height: 180px; overflow: auto;
+  }
+  .asset-item {
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 9px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .asset-item:hover { border-color: var(--accent2); }
+  .asset-item .meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .asset-item .ok { color: var(--ok); }
+  .asset-item .bad { color: var(--err); }
   @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; }
   }
@@ -222,6 +238,39 @@
 
     <div id="kernel-controls"></div>
 
+    <div class="control">
+      <label>
+        <span>读出时长 readout R / dt（0=全局快门）</span>
+        <span class="val" id="val-readout"></span>
+      </label>
+      <input type="range" id="ctl-readout" min="0" max="1" step="0.01" value="0.9">
+    </div>
+
+    <div class="control">
+      <label>读出方向 readout direction</label>
+      <select id="ctl-readout-dir">
+        <option value="top_down">top_down（首行先读出）</option>
+        <option value="bottom_up">bottom_up（末行先读出）</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <label>曝光窗扫掠方向 exposure sweep</label>
+      <select id="ctl-exposure-dir">
+        <option value="top_down">top_down（与读出同向）</option>
+        <option value="bottom_up">bottom_up（仅反转曝光窗）</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <label>曝光轮廓 exposure profile</label>
+      <select id="ctl-profile">
+        <option value="box">box（矩形）</option>
+        <option value="trapezoid">trapezoid（梯形）</option>
+        <option value="gaussian">gaussian（高斯）</option>
+      </select>
+    </div>
+
     <label class="check">
       <input type="checkbox" id="show-paths" checked>
       显示采样路径与曝光带 sampling paths + exposure band
@@ -240,6 +289,11 @@
       <span class="tag">KERNEL</span><span id="error-text"></span>
     </div>
     <div class="busy" id="busy" style="margin-top:8px"></div>
+
+    <div class="control" style="margin-top:14px">
+      <label>入库样片 demo assets（真实曝光积分，可重建）</label>
+      <div id="asset-list" class="asset-list">加载中…</div>
+    </div>
   </aside>
 
   <!-- ============================================================ stage -->
@@ -280,6 +334,10 @@
         <div class="metric">
           <div class="k">平均采样权重 mean weight (归一化)</div>
           <div class="v" id="m-weight">–</div>
+        </div>
+        <div class="metric">
+          <div class="k">行时序 row timing（首→末 行中心偏移 s）</div>
+          <div class="v" id="m-rowoffset" style="font-size:13px">–</div>
         </div>
       </div>
       <div class="legend" id="kernel-readout"></div>

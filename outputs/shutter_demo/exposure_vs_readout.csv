@@ -1,0 +1,11 @@
+sweep,shutter_angle_deg,exposure_s,readout_duration_s,smear_footprint_px,row_skew_std_px,rmse_vs_clean
+exposure_window_sweep,30.0,0.003472,0.000000,215,9.21463,0.002199
+exposure_window_sweep,90.0,0.010417,0.000000,3643,6.89196,0.013679
+exposure_window_sweep,180.0,0.020833,0.000000,6717,0.00000,0.031184
+exposure_window_sweep,270.0,0.031250,0.000000,8782,25.12253,0.044424
+exposure_window_sweep,360.0,0.041667,0.000000,10748,45.88655,0.054092
+readout_reorder_sweep,180.0,0.020833,0.000000,6717,0.00000,0.031184
+readout_reorder_sweep,180.0,0.020833,0.010417,6792,18.35640,0.033747
+readout_reorder_sweep,180.0,0.020833,0.020833,7018,35.70203,0.040459
+readout_reorder_sweep,180.0,0.020833,0.031250,7358,51.62280,0.049203
+readout_reorder_sweep,180.0,0.020833,0.039583,7656,64.44020,0.056195
